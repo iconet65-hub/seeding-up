@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seeding Up</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+    .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; }
+    button { background: #d4af37; color: white; font-weight: bold; cursor: pointer; }
+    .ticket { background: #f9f9f9; padding: 10px; margin: 10px 0; border-left: 3px solid #d4af37; }
+    #dashboard { display: none; }
+  </style>
+</head>
+<body>
+  <h1 style="text-align:center; color:#d4af37;">WANOFII</h1>
+
+  <!-- LOGIN -->
+  <div id="login" class="card">
+    <h2>🔐 Login</h2>
+    <input type="text" id="phone" placeholder="Phone" value="1000">
+    <input type="password" id="password" placeholder="Password" value="admin123">
+    <button onclick="login()">Login</button>
+    <button onclick="showRegister()">Register</button>
+  </div>
+
+  <!-- REGISTER -->
+  <div id="register" class="card" style="display:none;">
+    <h2>✨ Register</h2>
+    <input type="text" id="regPhone" placeholder="Phone">
+    <input type="password" id="regPassword" placeholder="Password (6+ chars)">
+    <input type="text" id="regName" placeholder="Full Name">
+    <input type="text" id="regFollower" placeholder="Follower Agent ID (optional)">
+    <input type="text" id="regPlacement" placeholder="Placement ID (optional)">
+    <button onclick="register()">Register</button>
+    <button onclick="showLogin()">← Back to Login</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="card">
+    <h2>Welcome!</h2>
+    <p><strong>Balance:</strong> ₵<span id="balance">0</span></p>
+    
+    <h3>🎫 Buy Ticket</h3>
+    <select id="gameType">
+      <option>Pick3</option>
+      <option>Pick4</option>
+      <option>Pick5</option>
+    </select>
+    <input type="text" id="numbers" placeholder="Numbers (e.g., 123)">
+    <select id="price">
+      <option value="5">₵5</option>
+      <option value="10" selected>₵10</option>
+      <option value="20">₵20</option>
+      <option value="30">₵30</option>
+      <option value="40">₵40</option>
+      <option value="50">₵50</option>
+      <option value="100">₵100</option>
+    </select>
+    <button onclick="buyTicket()">Buy Ticket</button>
+    
+    <h3>📜 My Tickets</h3>
+    <div id="tickets"></div>
+    
+    <button onclick="logout()" style="background:#ff4d4d;">Logout</button>
+  </div>
+
+  <script>
+    // 🔑 REPLACE WITH YOUR WEB APP URL
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyxNUX37qo23UTuP2hBZuWaC96K6BMhFhUzs_PM88Pi0JCiToS1aGxYENtw6jFMFiFp/exec																										';
+    
+    let currentUser = null;
+    
+    async function callAPI(action, params = {}) {
+      try {
+        const url = new URL(API_URL);
+        url.searchParams.set('action', action);
+        Object.keys(params).forEach(key => url.searchParams.set(key, params[key]));
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
+        return data.data;
+      } catch (error) {
+        throw new Error(error.message || 'Network error');
+      }
+    }
+    
+    // ===== AUTH =====
+    async function login() {
+      try {
+        const phone = document.getElementById('phone').value;
+        const password = document.getElementById('password').value;
+        
+        currentUser = await callAPI('login', { phone, password });
+        document.getElementById('balance').textContent = currentUser.balance;
+        
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('register').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        
+        loadTickets();
+      } catch (error) {
+        alert('❌ Login failed: ' + error.message);
+      }
+    }
+    
+    async function register() {
+      try {
+        const phone = document.getElementById('regPhone').value;
+        const password = document.getElementById('regPassword').value;
+        const name = document.getElementById('regName').value;
+        const follower = document.getElementById('regFollower').value;
+        const placement = document.getElementById('regPlacement').value;
+        
+        if (password.length < 6) throw new Error("Password must be 6+ characters");
+        
+        await callAPI('register', { 
+          phone, 
+          password, 
+          fullName: name,
+          followerAgentID: follower,
+          placementID: placement
+        });
+        
+        alert('✅ Registration successful! Login now.');
+        showLogin();
+      } catch (error) {
+        alert('❌ Registration failed: ' + error.message);
+      }
+    }
+    
+    // ===== TICKETS =====
+    async function buyTicket() {
+      try {
+        const gameType = document.getElementById('gameType').value;
+        const numbers = document.getElementById('numbers').value;
+        const price = document.getElementById('price').value;
+        
+        const digits = parseInt(gameType.replace('Pick', ''));
+        if (numbers.length !== digits) throw new Error(`Enter exactly ${digits} digits`);
+        
+        const result = await callAPI('buyTicket', {
+          phone: currentUser.phone,
+          gameType: gameType,
+          numbers: numbers,
+          price: price
+        });
+        
+        alert(`✅ Ticket purchased! ID: ${result.ticketID}`);
+        document.getElementById('balance').textContent = result.newBalance;
+        document.getElementById('numbers').value = '';
+        loadTickets();
+      } catch (error) {
+        alert('❌ Purchase failed: ' + error.message);
+      }
+    }
+    
+    async function loadTickets() {
+      try {
+        const data = await callAPI('getTickets', { phone: currentUser.phone });
+        const container = document.getElementById('tickets');
+        container.innerHTML = '';
+        
+        if (data.tickets.length === 0) {
+          container.innerHTML = '<p>No tickets yet</p>';
+          return;
+        }
+        
+        data.tickets.forEach(ticket => {
+          const div = document.createElement('div');
+          div.className = 'ticket';
+          div.innerHTML = `
+            <strong>${ticket.gameType} ${ticket.numbers}</strong><br>
+            Price: ₵${ticket.price} | ID: ${ticket.ticketID}
+          `;
+          container.appendChild(div);
+        });
+      } catch (error) {
+        console.error('Load tickets error:', error);
+      }
+    }
+    
+    // ===== NAVIGATION =====
+    function showLogin() {
+      document.getElementById('login').style.display = 'block';
+      document.getElementById('register').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'none';
+    }
+    
+    function showRegister() {
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('register').style.display = 'block';
+    }
+    
+    function logout() {
+      currentUser = null;
+      showLogin();
+    }
+    
+    // Initialize
+    showLogin();
+  </script>
+</body>
+</html>
